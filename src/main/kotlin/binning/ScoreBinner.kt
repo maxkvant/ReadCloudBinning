@@ -2,6 +2,7 @@ package binning
 
 import debruijn_graph.rc
 import debruijn_graph.writeFastaElement
+import primitives.readBins
 import scaffold_graph.ScoreGraph
 import scaffold_graph.ScoreGraphVertex
 import scaffold_graph.genScoreGraph
@@ -10,7 +11,6 @@ import java.io.File
 import kotlin.math.max
 
 const val gapString = "NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN"
-const val maxbinPath = "/media/maxim/DATA/software/MaxBin-2.2.5/run_MaxBin.pl"
 
 class ScoreBinner(contigsFile: String, samFile: String, val outdir: String) {
     private val contigs = readContigs(contigsFile, samFile)
@@ -26,18 +26,17 @@ class ScoreBinner(contigsFile: String, samFile: String, val outdir: String) {
         val clustesFile = File("$outdir/clusters.fasta")
         val coverageFile = File("$outdir/coverages.abund")
 
-        var clusters = contigsLong.values.mapIndexed { i, contig -> ContigsCluster(contig.name, listOf(contig)) }
+        var clusters = contigsLong.values.mapIndexed { i, contig -> ContigsCluster("CLUSTER_$i", listOf(contig)) }
         var clustersPrev = clusters
         var bins = mapOf<String, Int>()
 
         repeat(2) { _ ->
             outputCoverages(coverageFile, clusters)
             outputClusters(clustesFile, clusters)
-            val maxbinDir = runMaxbin(clustesFile, coverageFile)
-            bins = readMaxbinBins(maxbinDir)
+            bins = Maxbin("$outdir/maxbin", clustesFile, coverageFile).getBins()
             val contigsRs = estimateContigRadius(clusters, bins)
 
-            val edges = scoreGraph.edges().filter { it.score > 0.12  }.filter { edge ->
+            val edges = scoreGraph.filteredEdges().filter { edge ->
                 val seqFrom = contigsByName[edge.from.contigName]!!.seq
                 val seqTo = contigsByName[edge.to.contigName]!!.seq
                 val kmerDist = kmerProfileOf(listOf(seqFrom)).dist(kmerProfileOf(listOf(seqTo)))
@@ -84,7 +83,6 @@ class ScoreBinner(contigsFile: String, samFile: String, val outdir: String) {
                 dfs(e.to.contigName, c)
             }
         }
-
         var i = 0
         for (v in scoreGraph.vertices) {
             if (!component.containsKey(v.contigName)) {
@@ -92,7 +90,6 @@ class ScoreBinner(contigsFile: String, samFile: String, val outdir: String) {
                 i += 1
             }
         }
-
         return scoreGraph.vertices.map { it.contigName }.distinct().groupBy { component[it] }.values.toList()
     }
 

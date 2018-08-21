@@ -1,6 +1,7 @@
 package scaffold_graph
 
 import primitives.ContigBarcodes
+import primitives.step
 import kotlin.math.min
 
 class ScoreGraph(val vertices: List<ScoreGraphVertex>) {
@@ -8,6 +9,8 @@ class ScoreGraph(val vertices: List<ScoreGraphVertex>) {
     private val edgesTo   = mutableMapOf<ScoreGraphVertex, MutableList<Edge>>()
 
     fun edges(): List<Edge> = edgesFrom.values.flatMap { it.toList() }
+
+    fun filteredEdges(): List<Edge> = edgesFrom.values.flatMap { it.toList() }.filter { it.score > 0.4 }
 
     fun addEdge(v: ScoreGraphVertex, u: ScoreGraphVertex, score: Double) {
         val e = Edge(v, u, score)
@@ -23,6 +26,11 @@ class ScoreGraph(val vertices: List<ScoreGraphVertex>) {
 
 fun genScoreGraph(contigBarcodes: List<ContigBarcodes>, partLen: Int = 3000): ScoreGraph {
     val vertices: MutableList<ScoreGraphVertex> = mutableListOf()
+
+    val barcodesK = contigBarcodes.map { barcodesK(it, partLen) }.filterNotNull().average()
+
+    println(barcodesK)
+
     contigBarcodes.forEach {
         if (it.length > partLen) {
             vertices.add(ScoreGraphVertex(it.name, it.beginBarcodes(partLen), it.endBarcodes(partLen), false))
@@ -69,11 +77,30 @@ fun genScoreGraph(contigBarcodes: List<ContigBarcodes>, partLen: Int = 3000): Sc
     val graph = ScoreGraph(vertices)
     intersections.forEach {
         val (i, j) = it.key
-        val size = it.value
-        val score = size / (0.5 * (vertices[i].beginInfo.set.size + vertices[j].endInfo.set.size))
-        graph.addEdge(vertices[i], vertices[j], score)
+        val size = if (it.value > 1) it.value else 0.0
+        val score = barcodesK * size / (0.5 * (vertices[i].beginInfo.set.size + vertices[j].endInfo.set.size))
+        graph.addEdge(vertices[i], vertices[j], score * barcodesK)
     }
 
     return graph
 }
 
+private fun barcodesK(contigBarcodes: ContigBarcodes, partLen: Int): Double? {
+    val partSz = partLen / step
+    val barcodes = contigBarcodes.barcodes().toTypedArray()
+    if (barcodes.size <= partSz * 3) {
+        return null
+    }
+    fun windowBarcodes(l: Int, r: Int): Set<Int> {
+        return barcodes.copyOfRange(l, r).flatMapTo(mutableSetOf(), { it })
+    }
+    val intersectionAverage = (0 .. barcodes.size - partSz * 2).map { i ->
+        windowBarcodes(i, i + partSz).intersect(windowBarcodes(i + partSz, i + 2 * partSz)).size
+    }.average()
+
+    val sizeAve = (0 .. barcodes.size - partSz).map { i ->
+        windowBarcodes(i, i + partSz).size
+    }.average()
+
+    return sizeAve / intersectionAverage
+}
