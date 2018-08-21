@@ -23,19 +23,21 @@ class KmerProfile(val frequences: DoubleArray) {
     }
 }
 
-fun kmerProfileOf(sequence: String): KmerProfile {
+fun kmerProfileOf(sequences: List<String>): KmerProfile {
     val frequences = DoubleArray(profileKmers, { 0.0 })
-    for (seq in listOf(sequence, sequence.rc())) {
-        forKmers@ for (i in 0..seq.length - profileK) {
-            val kmer = seq.substring(i, i + profileK)
-            var kmerI = 0
-            for (c in kmer) {
-                if (!nucleotides.contains(c)) {
-                    continue@forKmers
+    for (sequence in sequences) {
+        for (seq in listOf(sequence, sequence.rc())) {
+            forKmers@ for (i in 0..seq.length - profileK) {
+                val kmer = seq.substring(i, i + profileK)
+                var kmerI = 0
+                for (c in kmer) {
+                    if (!nucleotides.contains(c)) {
+                        continue@forKmers
+                    }
+                    kmerI = kmerI * 4 + nucleotides.indexOf(c)
                 }
-                kmerI = kmerI * 4 + nucleotides.indexOf(c)
+                frequences[kmerI] += 1.0
             }
-            frequences[kmerI] += 1.0
         }
     }
     val sum = frequences.sum()

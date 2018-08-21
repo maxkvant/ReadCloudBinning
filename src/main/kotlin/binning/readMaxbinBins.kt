@@ -13,5 +13,5 @@ fun readMaxbinBins(dir: String): Map<String, Int> {
             res[it.name] = i + 1
         }
     }
-    return res.withDefault { 0 }
+    return res
 }
