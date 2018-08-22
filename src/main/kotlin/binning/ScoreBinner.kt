@@ -1,39 +1,42 @@
 package binning
 
-import debruijn_graph.rc
 import debruijn_graph.writeFastaElement
-import primitives.readBins
 import scaffold_graph.ScoreGraph
-import scaffold_graph.ScoreGraphVertex
 import scaffold_graph.genScoreGraph
 import utils.execCmd
 import java.io.File
+import java.util.concurrent.ForkJoinPool
 import kotlin.math.max
+import kotlin.streams.toList
 
 const val gapString = "NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN"
 
-class ScoreBinner(contigsFile: String, samFile: String, val outdir: String) {
-    private val contigs = readContigs(contigsFile, samFile)
+class ScoreBinner(override val contigsFile: File, samFile: String, override val outdir: String): Binner {
+    private val contigs = readContigs(contigsFile.absolutePath, samFile)
     private val contigsByName = contigs.groupBy { it.name }.mapValues { it.value.first() }
     private val scoreGraph = genScoreGraph(contigs.map { it.barcodes })
+    private val tmpDir = "$outdir/scoreBinnerTmp"
+    private val threads = 16
 
-    fun binContigs() {
-        if (!File(outdir).exists()) {
-            File(outdir).mkdirs()
-        }
+    override fun getBins(): Map<String, Int> {
+        File(outdir).deleteRecursively()
+        File(tmpDir).deleteRecursively()
+
+        File(outdir).mkdirs()
+        File(tmpDir).mkdirs()
+
         val longNames = scoreGraph.vertices.map { it.contigName }.toSet()
         val contigsLong = contigsByName.filter { longNames.contains(it.key) }
-        val clustesFile = File("$outdir/clusters.fasta")
-        val coverageFile = File("$outdir/coverages.abund")
+        val clustesFile = File("$tmpDir/clusters.fasta")
+        val coverageFile = File("$tmpDir/coverages.abund")
 
         var clusters = contigsLong.values.mapIndexed { i, contig -> ContigsCluster("CLUSTER_$i", listOf(contig)) }
-        var clustersPrev = clusters
-        var bins = mapOf<String, Int>()
+        var resBins: Map<String, Int> = mapOf()
 
-        repeat(2) { _ ->
+        repeat(4) { iteration ->
             outputCoverages(coverageFile, clusters)
             outputClusters(clustesFile, clusters)
-            bins = Maxbin("$outdir/maxbin", clustesFile, coverageFile).getBins()
+            val bins = Maxbin("$tmpDir/maxbin", clustesFile, coverageFile).getBins()
             val contigsRs = estimateContigRadius(clusters, bins)
 
             val edges = scoreGraph.filteredEdges().filter { edge ->
@@ -41,30 +44,43 @@ class ScoreBinner(contigsFile: String, samFile: String, val outdir: String) {
                 val seqTo = contigsByName[edge.to.contigName]!!.seq
                 val kmerDist = kmerProfileOf(listOf(seqFrom)).dist(kmerProfileOf(listOf(seqTo)))
                 val maxR = max(contigsRs[edge.from.contigName]!!, contigsRs[edge.to.contigName]!!)
-                println("$kmerDist ${maxR * 3}")
                         kmerDist < maxR * 3
-            }
+            }.toList()
+
+            resBins = toContigBins(clusters, bins)
+
+            saveBins("$tmpDir/bins_$iteration", contigsLong.values.toList(), resBins)
+
 
             val components = connectedComponents(edges)
-            clustersPrev = clusters
             clusters = components.mapIndexed { i, contigNames ->
                 val contigs = contigNames.map { contigsByName[it]!! }
                 ContigsCluster("CLUSTER_$i", contigs)
             }
         }
-        val contigToBin = clustersPrev
-                .flatMap { cluster -> cluster.contigs.map { Pair(it, bins[cluster.name]) } }
-                .groupBy { it.second }
-                .mapValues { (_, contigs) -> contigs.map { it.first } }
+        saveBins(outdir, contigsLong.values.toList(), resBins)
+        return resBins
+    }
 
-        val dir = "$outdir/bins"
-        File(dir).deleteRecursively()
-        File(dir).mkdirs()
-        contigToBin.forEach { (bin, contigs) ->
-            File("$dir/bin_$bin.fasta").printWriter().use {
+    fun toContigBins(clusters: List<ContigsCluster>, clusterBins: Map<String, Int>): Map<String, Int> {
+        return clusters.flatMap { cluster -> cluster.contigs
+                    .filter { clusterBins[cluster.name] != null }
+                    .map { Pair(it.name, clusterBins[cluster.name]!!) }
+        }.toMap()
+
+
+    }
+
+    private fun saveBins(dir: String, contigs: List<ContigInfo>, bins: Map<String, Int>) {
+        if (!File(dir).exists()) {
+            File(dir).mkdirs()
+        }
+
+        contigs.groupBy { bins[it.name] }.forEach { (bin, contigs) ->
+            val binName = if (bin != null) "$dir/bin_$bin.fasta" else "$dir/bin_noclass"
+            File(binName).printWriter().use {
                 contigs.forEach { contig ->
                     it.writeFastaElement(contig.name, contig.seq)
-
                 }
             }
         }
@@ -124,14 +140,6 @@ class ScoreBinner(contigsFile: String, samFile: String, val outdir: String) {
         val averageR = binsRadius.values.map { it.second }.average()
         val contigRs = binsRadius.values.flatMap { (contigs, r) -> contigs.map { Pair(it.name, r) }  }.toMap()
         return contigRs.withDefault { averageR }
-    }
-
-    fun runMaxbin(fastaFile: File, coveragesFile: File): String {
-        val dir = "$outdir/maxbin"
-        File(dir).deleteRecursively()
-        File(dir).mkdirs()
-        execCmd("$maxbinPath -contig ${fastaFile.absolutePath} -abund ${coveragesFile.absolutePath} -out $dir/bin")
-        return dir
     }
 
     class ContigsCluster(val name: String, val contigs: List<ContigInfo>) {

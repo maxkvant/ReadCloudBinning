@@ -13,71 +13,35 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 fun main(args: Array<String>) {
-    val samFile1 = "/media/maxim/DATA/binning/output/simulated_dataset_1/alignments/aln_contigs.bam"
-    val bins1 = "/media/maxim/DATA/binning/output/simulated_dataset_1/maxbin3"
-    val pafFile1 = "/media/maxim/DATA/binning/output/simulated_dataset_1/tmp_read_cloud_binning/aln_contigs.paf"
-    val contigs1 = "/media/maxim/DATA/binning/output/simulated_dataset_1_master/contigs.fasta"
+    class Dataset(val name: String, val contigsFile: String, val samFile: String, val dir: String)
 
-    val samFile2 = "/Iceking/mvinnichenko/binning/mock/alignments/aln_contigs.sam"
-    val bins2 = "/Iceking/mvinnichenko/binning/mock/maxbin_spades_scaffolds"
-    val samFile3 = "/Iceking/mvinnichenko/binning/human_gut_other/alignments/aln_contigs.bam"
+    val dataset_sim_1 = Dataset(
+            name = "sim_1",
+            contigsFile = "/media/maxim/DATA/binning/output/simulated_dataset_1_master/contigs.fasta",
+            samFile = "/media/maxim/DATA/binning/output/simulated_dataset_1/alignments/aln_contigs.bam",
+            dir = "."
+    )
 
+    val dataset_mock = Dataset(
+            name = "mock",
+            contigsFile = "/Iceking/mvinnichenko/binning/mock/spades/baseline_scaffolds.fasta",
+            samFile = "/Iceking/mvinnichenko/binning/mock/alignments/aln_contigs.sam",
+            dir = "/Iceking/mvinnichenko/binning/mock"
+    )
 
-    val binner = ScoreBinner(contigs1, samFile1, "scoreBinner")
-    binner.binContigs()
+    val dataset_hmp_mock = Dataset(
+            name = "hmp_mock",
+            contigsFile = "/Iceking/mvinnichenko/binning/mash_refs_by_snurk/spades/contigs.fasta",
+            samFile = "/Iceking/mvinnichenko/binning/mash_refs_by_snurk/alignments/aln_reads_refs.sam",
+            dir = "/Iceking/mvinnichenko/binning/mash_refs_by_snurk"
+    )
 
-    val contigBarcodes = readContigsBarcodes(samFile1)
-    println(contigBarcodes.size)
-    val contigColors = readBins(bins1)
-
-
-    val debruijnGraph = readSpadesGraph(55, "/media/maxim/DATA/binning/output/simulated_dataset_1_master/assembly_graph.fastg")
-
-    val pathsFile1 = "/media/maxim/DATA/binning/output/simulated_dataset_1_master/contigs.paths"
-    val contigPaths = readContigPaths(debruijnGraph, pathsFile1)
-            .filter { !it.contig.endsWith("'") }
-            .groupBy { it.contig }
-            .mapValues { it.value.first() }
-
-    print(contigPaths.size)
-
-    val graph = genScoreGraph(contigBarcodes)
-
-    val pafRecords = readPafRecords(pafFile1)
-    val genomePath = genGenomePath(pafRecords)
-
-    val graphsDir = "graphs"
-    File(graphsDir).mkdirs()
-
-    fun ScoreGraphVertex.pathStart(): Int {
-        val contigPath = contigPaths[this.contigName]!!
-        return if (!this.rc) contigPath.begin.id else contigPath.end.id
-    }
-
-    fun ScoreGraphVertex.pathEnd(): Int {
-        val contigPath = contigPaths[this.contigName]!!
-        return if (!this.rc) contigPath.end.id else contigPath.begin.id
-    }
-
-    val thresholds = listOf(0.15, 0.12, 0.1)
-
-    for (threshold in thresholds) {
-        println(threshold)
-        val dotFile = File("$graphsDir/sim_1_score_${threshold}.dot")
-        dotFile.printWriter().use { printWriter ->
-            val edges = graph.edges().filter {
-                it.score > threshold
-            }
-            outputToDot(edges, printWriter, contigColors = contigColors)
-        }
-    }
-
-    val scgFile = File("$graphsDir/scoreGraph.scg")
-    scgFile.printWriter().use { printWriter ->
-        graph.edges().forEach { e ->
-            printWriter.println(e.toScgRecord())
-        }
-    }
+    val dataset = dataset_sim_1
+    ScoreBinner(
+            contigsFile = File(dataset.contigsFile),
+            samFile = dataset.samFile,
+            outdir = "${dataset.dir}/scoreBinner"
+    ).getBins()
 }
 
 fun genGenomePath(pafRecords: List<PafRecord>): MutableSet<Pair<String, String>> {
@@ -90,7 +54,6 @@ fun genGenomePath(pafRecords: List<PafRecord>): MutableSet<Pair<String, String>>
             val vName = sortedRecords[i].qAlignment.name
             val uName = sortedRecords[j].qAlignment.name
             res.add(Pair(vName, uName))
-            //res.add(Pair(uName, vName))
         }
     }
     return res

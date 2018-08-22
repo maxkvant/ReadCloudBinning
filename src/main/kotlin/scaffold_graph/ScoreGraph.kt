@@ -2,6 +2,7 @@ package scaffold_graph
 
 import primitives.ContigBarcodes
 import primitives.step
+import java.lang.Math.pow
 import kotlin.math.min
 
 class ScoreGraph(val vertices: List<ScoreGraphVertex>) {
@@ -10,7 +11,7 @@ class ScoreGraph(val vertices: List<ScoreGraphVertex>) {
 
     fun edges(): List<Edge> = edgesFrom.values.flatMap { it.toList() }
 
-    fun filteredEdges(): List<Edge> = edgesFrom.values.flatMap { it.toList() }.filter { it.score > 0.4 }
+    fun filteredEdges(): List<Edge> = edgesFrom.values.flatMap { it.toList() }.filter { it.score > 0.35 }
 
     fun addEdge(v: ScoreGraphVertex, u: ScoreGraphVertex, score: Double) {
         val e = Edge(v, u, score)
@@ -88,19 +89,24 @@ fun genScoreGraph(contigBarcodes: List<ContigBarcodes>, partLen: Int = 3000): Sc
 private fun barcodesK(contigBarcodes: ContigBarcodes, partLen: Int): Double? {
     val partSz = partLen / step
     val barcodes = contigBarcodes.barcodes().toTypedArray()
-    if (barcodes.size <= partSz * 3) {
+    if (barcodes.size <= partSz * 5) {
         return null
     }
     fun windowBarcodes(l: Int, r: Int): Set<Int> {
         return barcodes.copyOfRange(l, r).flatMapTo(mutableSetOf(), { it })
     }
-    val intersectionAverage = (0 .. barcodes.size - partSz * 2).map { i ->
+    val intersectionAverage1 = (0 .. barcodes.size - partSz * 2).map { i ->
         windowBarcodes(i, i + partSz).intersect(windowBarcodes(i + partSz, i + 2 * partSz)).size
+    }.average()
+
+    val intersectionAverage2 = (0 .. barcodes.size - partSz * 3).map { i ->
+        windowBarcodes(i, i + partSz).intersect(windowBarcodes(i + 2 * partSz, i + 3 * partSz)).size
     }.average()
 
     val sizeAve = (0 .. barcodes.size - partSz).map { i ->
         windowBarcodes(i, i + partSz).size
     }.average()
 
-    return sizeAve / intersectionAverage
+    val sizeExpected = pow(intersectionAverage1, 2.0) / intersectionAverage2
+    return sizeAve / sizeExpected
 }
