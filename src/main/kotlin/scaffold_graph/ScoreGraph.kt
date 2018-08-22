@@ -6,14 +6,17 @@ import java.lang.Math.pow
 import kotlin.math.min
 
 class ScoreGraph(val vertices: List<ScoreGraphVertex>) {
+    private val vertexSet = vertices.toSet()
     private val edgesFrom = mutableMapOf<ScoreGraphVertex, MutableList<Edge>>()
     private val edgesTo   = mutableMapOf<ScoreGraphVertex, MutableList<Edge>>()
 
     fun edges(): List<Edge> = edgesFrom.values.flatMap { it.toList() }
 
-    fun filteredEdges(): List<Edge> = edgesFrom.values.flatMap { it.toList() }.filter { it.score > 0.35 }
+    fun filteredEdges(): List<Edge> = edgesFrom.values.flatMap { it.toList() }.filter { it.score > 0.2 }
 
     fun addEdge(v: ScoreGraphVertex, u: ScoreGraphVertex, score: Double) {
+        require(vertexSet.contains(v) && vertexSet.contains(u))
+
         val e = Edge(v, u, score)
         edgesFrom.putIfAbsent(v, mutableListOf())
         edgesFrom[v]!!.add(e)
@@ -26,9 +29,12 @@ class ScoreGraph(val vertices: List<ScoreGraphVertex>) {
 }
 
 fun genScoreGraph(contigBarcodes: List<ContigBarcodes>, partLen: Int = 3000): ScoreGraph {
+    println("score graph construction")
+
     val vertices: MutableList<ScoreGraphVertex> = mutableListOf()
 
-    val barcodesK = contigBarcodes.map { barcodesK(it, partLen) }.filterNotNull().average()
+    val barcodesKs = contigBarcodes.map { barcodesK(it, partLen) }.filterNotNull().sorted()
+    val barcodesK = barcodesKs[(barcodesKs.size - 1) / 5]
 
     println(barcodesK)
 
@@ -80,9 +86,13 @@ fun genScoreGraph(contigBarcodes: List<ContigBarcodes>, partLen: Int = 3000): Sc
         val (i, j) = it.key
         val size = if (it.value > 1) it.value else 0.0
         val score = barcodesK * size / (0.5 * (vertices[i].beginInfo.set.size + vertices[j].endInfo.set.size))
-        graph.addEdge(vertices[i], vertices[j], score * barcodesK)
+        if (size != 0.0 && score > 0.2) {
+            println("$score = $barcodesK * $size / (0.5 * (${vertices[i].beginInfo.set.size} + ${vertices[j].endInfo.set.size})")
+        }
+        graph.addEdge(vertices[i], vertices[j], score)
     }
 
+    println("score graph is constructed")
     return graph
 }
 
@@ -107,6 +117,11 @@ private fun barcodesK(contigBarcodes: ContigBarcodes, partLen: Int): Double? {
         windowBarcodes(i, i + partSz).size
     }.average()
 
+    if (intersectionAverage1 <= 1.0 || intersectionAverage2 <= 1.0) {
+        return null
+    }
     val sizeExpected = pow(intersectionAverage1, 2.0) / intersectionAverage2
+
+    println("$sizeAve $sizeExpected ${sizeAve / sizeExpected} | $intersectionAverage1 $intersectionAverage2")
     return sizeAve / sizeExpected
 }

@@ -4,7 +4,7 @@ import primitives.readFasta
 import utils.execCmd
 import java.io.File
 
-const val maxbinPath = "/media/maxim/DATA/software/MaxBin-2.2.5/run_MaxBin.pl"
+const val maxbinPath = "/home/mvinnichenko/software/MaxBin-2.2.5/run_MaxBin.pl" //"/media/maxim/DATA/software/MaxBin-2.2.5/run_MaxBin.pl"
 
 class Maxbin(override val outdir: String, override val contigsFile: File, val coveragesFile: File): Binner {
     private var result: Map<String, Int>? = null

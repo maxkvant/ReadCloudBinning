@@ -27,30 +27,32 @@ class ScoreBinner(override val contigsFile: File, samFile: String, override val 
 
         val longNames = scoreGraph.vertices.map { it.contigName }.toSet()
         val contigsLong = contigsByName.filter { longNames.contains(it.key) }
-        val clustesFile = File("$tmpDir/clusters.fasta")
-        val coverageFile = File("$tmpDir/coverages.abund")
 
         var clusters = contigsLong.values.mapIndexed { i, contig -> ContigsCluster("CLUSTER_$i", listOf(contig)) }
         var resBins: Map<String, Int> = mapOf()
 
-        repeat(4) { iteration ->
+        repeat(3) { iteration ->
+            val clustesFile = File("$tmpDir/clusters_$iteration.fasta")
+            val coverageFile = File("$tmpDir/coverages_$iteration.abund")
+
             outputCoverages(coverageFile, clusters)
             outputClusters(clustesFile, clusters)
             val bins = Maxbin("$tmpDir/maxbin", clustesFile, coverageFile).getBins()
-            val contigsRs = estimateContigRadius(clusters, bins)
-
-            val edges = scoreGraph.filteredEdges().filter { edge ->
-                val seqFrom = contigsByName[edge.from.contigName]!!.seq
-                val seqTo = contigsByName[edge.to.contigName]!!.seq
-                val kmerDist = kmerProfileOf(listOf(seqFrom)).dist(kmerProfileOf(listOf(seqTo)))
-                val maxR = max(contigsRs[edge.from.contigName]!!, contigsRs[edge.to.contigName]!!)
-                        kmerDist < maxR * 3
-            }.toList()
 
             resBins = toContigBins(clusters, bins)
 
             saveBins("$tmpDir/bins_$iteration", contigsLong.values.toList(), resBins)
 
+            val contigsRs = estimateContigRadius(clusters, bins)
+            val rAverage = contigsRs.values.distinct().average()
+
+            val edges = scoreGraph.filteredEdges().filter { edge ->
+                val seqFrom = contigsByName[edge.from.contigName]!!.seq
+                val seqTo = contigsByName[edge.to.contigName]!!.seq
+                val kmerDist = kmerProfileOf(listOf(seqFrom)).dist(kmerProfileOf(listOf(seqTo)))
+                val maxR = max(contigsRs[edge.from.contigName] ?: rAverage, contigsRs[edge.to.contigName] ?: rAverage)
+                kmerDist < maxR * 3
+            }.toList()
 
             val components = connectedComponents(edges)
             clusters = components.mapIndexed { i, contigNames ->

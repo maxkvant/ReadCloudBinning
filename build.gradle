@@ -41,3 +41,7 @@ compileKotlin {
 compileTestKotlin {
     kotlinOptions.jvmTarget = "1.8"
 }
+
+tasks.withType(JavaExec) {
+    jvmArgs = ['-Xms100G', '-Xmx100G']
+}

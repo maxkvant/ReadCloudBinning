@@ -32,11 +32,19 @@ fun main(args: Array<String>) {
     val dataset_hmp_mock = Dataset(
             name = "hmp_mock",
             contigsFile = "/Iceking/mvinnichenko/binning/mash_refs_by_snurk/spades/contigs.fasta",
-            samFile = "/Iceking/mvinnichenko/binning/mash_refs_by_snurk/alignments/aln_reads_refs.sam",
+            samFile = "/Iceking/mvinnichenko/binning/mash_refs_by_snurk/alignments/aln_reads_contigs.sam",
             dir = "/Iceking/mvinnichenko/binning/mash_refs_by_snurk"
     )
 
-    val dataset = dataset_sim_1
+    val dataset_human_gut = Dataset(
+            name = "human_gut",
+            contigsFile = "/Iceking/mvinnichenko/binning/human_gut_other/spades/pe_final_contigs.fasta",
+            samFile = "/Iceking/mvinnichenko/binning/human_gut_other/alignments/aln_contigs.bam",
+            dir = "/Iceking/mvinnichenko/binning/human_gut_other/"
+    )
+
+
+    val dataset = dataset_human_gut
     ScoreBinner(
             contigsFile = File(dataset.contigsFile),
             samFile = dataset.samFile,
