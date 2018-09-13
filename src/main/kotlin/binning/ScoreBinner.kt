@@ -1,13 +1,9 @@
 package binning
 
 import debruijn_graph.writeFastaElement
-import scaffold_graph.ScoreGraph
 import scaffold_graph.genScoreGraph
-import utils.execCmd
 import java.io.File
-import java.util.concurrent.ForkJoinPool
 import kotlin.math.max
-import kotlin.streams.toList
 
 const val gapString = "NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN"
 
@@ -16,7 +12,6 @@ class ScoreBinner(override val contigsFile: File, samFile: String, override val 
     private val contigsByName = contigs.groupBy { it.name }.mapValues { it.value.first() }
     private val scoreGraph = genScoreGraph(contigs.map { it.barcodes })
     private val tmpDir = "$outdir/scoreBinnerTmp"
-    private val threads = 16
 
     override fun getBins(): Map<String, Int> {
         File(outdir).deleteRecursively()
@@ -49,12 +44,12 @@ class ScoreBinner(override val contigsFile: File, samFile: String, override val 
             val edges = scoreGraph.filteredEdges().filter { edge ->
                 val seqFrom = contigsByName[edge.from.contigName]!!.seq
                 val seqTo = contigsByName[edge.to.contigName]!!.seq
-                val kmerDist = kmerProfileOf(listOf(seqFrom)).dist(kmerProfileOf(listOf(seqTo)))
+                val kmerDist = kmerProfileOf(seqFrom).dist(kmerProfileOf(seqTo))
                 val maxR = max(contigsRs[edge.from.contigName] ?: rAverage, contigsRs[edge.to.contigName] ?: rAverage)
-                kmerDist < maxR * 3
+                kmerDist < maxR * 4
             }.toList()
 
-            val components = connectedComponents(edges)
+            val components = scoreGraph.connectedComponentsContigs(edges)
             clusters = components.mapIndexed { i, contigNames ->
                 val contigs = contigNames.map { contigsByName[it]!! }
                 ContigsCluster("CLUSTER_$i", contigs)
@@ -71,44 +66,6 @@ class ScoreBinner(override val contigsFile: File, samFile: String, override val 
         }.toMap()
 
 
-    }
-
-    private fun saveBins(dir: String, contigs: List<ContigInfo>, bins: Map<String, Int>) {
-        if (!File(dir).exists()) {
-            File(dir).mkdirs()
-        }
-
-        contigs.groupBy { bins[it.name] }.forEach { (bin, contigs) ->
-            val binName = if (bin != null) "$dir/bin_$bin.fasta" else "$dir/bin_noclass"
-            File(binName).printWriter().use {
-                contigs.forEach { contig ->
-                    it.writeFastaElement(contig.name, contig.seq)
-                }
-            }
-        }
-    }
-
-    private fun connectedComponents(edges: List<ScoreGraph.Edge>): List<List<String>> {
-        val edgesFrom = edges.groupBy { it.from.contigName }
-        val component = mutableMapOf<String, Int>()
-
-        fun dfs(v: String, c: Int) {
-            if (component.containsKey(v)) {
-                return
-            }
-            component[v] = c
-            for (e in edgesFrom[v] ?: emptyList()) {
-                dfs(e.to.contigName, c)
-            }
-        }
-        var i = 0
-        for (v in scoreGraph.vertices) {
-            if (!component.containsKey(v.contigName)) {
-                dfs(v.contigName, i)
-                i += 1
-            }
-        }
-        return scoreGraph.vertices.map { it.contigName }.distinct().groupBy { component[it] }.values.toList()
     }
 
     private fun outputCoverages(file: File, clusters: List<ContigsCluster>) {

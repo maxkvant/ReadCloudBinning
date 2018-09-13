@@ -46,3 +46,7 @@ fun kmerProfileOf(sequences: List<String>): KmerProfile {
     }
     return KmerProfile(frequences)
 }
+
+fun kmerProfileOf(sequence: String): KmerProfile {
+    return kmerProfileOf(listOf(sequence))
+}

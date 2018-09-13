@@ -25,6 +25,29 @@ class ScoreGraph(val vertices: List<ScoreGraphVertex>) {
         edgesTo[u]!!.add(e)
     }
 
+    fun connectedComponentsContigs(edges: List<ScoreGraph.Edge>): List<List<String>> {
+        val edgesFrom = edges.groupBy { it.from.contigName }
+        val component = mutableMapOf<String, Int>()
+
+        fun dfs(v: String, c: Int) {
+            if (component.containsKey(v)) {
+                return
+            }
+            component[v] = c
+            for (e in edgesFrom[v] ?: emptyList()) {
+                dfs(e.to.contigName, c)
+            }
+        }
+        var i = 0
+        for (v in vertices) {
+            if (!component.containsKey(v.contigName)) {
+                dfs(v.contigName, i)
+                i += 1
+            }
+        }
+        return vertices.map { it.contigName }.distinct().groupBy { component[it] }.values.toList()
+    }
+
     class Edge(val from: ScoreGraphVertex, val to: ScoreGraphVertex, val score: Double)
 }
 

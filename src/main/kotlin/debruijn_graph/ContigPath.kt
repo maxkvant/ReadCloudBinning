@@ -5,13 +5,19 @@ class ContigPath(val contig: String, val blocsEdges: List<List<DebruijnGraph.Edg
         blocsEdges.forEach { edges ->
             for (i in 0 until edges.size - 1) {
 
-                if (setOf(edges[i].from, edges[i].to, edges[i].from.rc(), edges[i].to.rc())
+                /*if (setOf(edges[i].from, edges[i].to, edges[i].from.rc(), edges[i].to.rc())
                                 .intersect(setOf(edges[i + 1].from, edges[i + 1].to)).isEmpty()) {
                     println("${edges[i].id} ${edges[i + 1].id}")
                     println(edges[i].from)
                     println(edges[i].to)
                     println(edges[i + 1].from)
                     println(edges[i + 1].to)
+                    println()
+                }*/
+                if (edges[i].to != edges[i + 1].from) {
+                    println("$contig: ${edges[i].id} -> ${edges[i + 1].id}")
+                    println(edges[i].to)
+                    println(edges[i + 1].from)
                     println()
                 }
 //                require(edges[i].to == edges[i + 1].from || edges[i].from == edges[i + 1].to)

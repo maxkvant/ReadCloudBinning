@@ -1,19 +1,14 @@
-import binning.ScoreBinner
-import com.github.sh0nk.matplotlib4j.Plot
-import debruijn_graph.readPairedBarcodeIndex
+import binning.MajorityBinner
 import debruijn_graph.readSpadesGraph
 import primitives.*
 import scaffold_graph.ScoreGraph
 import scaffold_graph.ScoreGraphVertex
-import scaffold_graph.genScoreGraph
-import scaffold_graph.toScgRecord
 import java.io.File
 import java.io.PrintWriter
-import kotlin.math.min
 import kotlin.math.roundToInt
 
 fun main(args: Array<String>) {
-    class Dataset(val name: String, val contigsFile: String, val samFile: String, val dir: String)
+    open class Dataset(val name: String, val contigsFile: String, val samFile: String, val dir: String)
 
     val dataset_sim_1 = Dataset(
             name = "sim_1",
@@ -43,12 +38,23 @@ fun main(args: Array<String>) {
             dir = "/Iceking/mvinnichenko/binning/human_gut_other/"
     )
 
+    val dataset_synth = object: Dataset(
+            name = "SYNTH",
+            contigsFile = "/Iceking/mvinnichenko/binning/SYNTH/spades/contigs.fasta",
+            samFile = "/Iceking/mvinnichenko/binning/SYNTH/alignments/aln_spades_contigs.bam",
+            dir = "/Iceking/mvinnichenko/binning/SYNTH/"
+    ) {
+        val depthFile = "/Iceking/mvinnichenko/binning/SYNTH/alignments/depth_contigs.txt"
+    }
 
-    val dataset = dataset_human_gut
-    ScoreBinner(
+    val dataset = dataset_synth
+    val contigBarcodes = readContigsBarcodes(dataset.samFile)
+    println(dataset.name)
+    MajorityBinner(
             contigsFile = File(dataset.contigsFile),
             samFile = dataset.samFile,
-            outdir = "${dataset.dir}/scoreBinner"
+            outdir = "${dataset.dir}/majorityBinner",
+            depthFile = File(dataset.depthFile)
     ).getBins()
 }
 
